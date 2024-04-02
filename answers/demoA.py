@@ -25,33 +25,42 @@ unified = local.unary_union.convex_hull
 
 # grab the parts of the GRAPH that fall within the region
 G = ox.graph_from_polygon(unified, network_type='drive', truncate_by_edge=True,
-                          clean_periphery=False, simplify=True)
+                          simplify=True)
 # ox.plot_graph(ox.project_graph(G)) #check to see if this is the graph we want
 
 # assemble the errands list =============================================================
 # check locations with the openstreetmaps.com website, to make sure the titles return a valid place
-errands = ['Nat Bailey Stadium, Vancouver, BC', 'PNE, Vancouver, BC',
-           'Science World', 'Oakridge Mall, Vancouver', 'Granville and King Edward, Vancouver, BC',
-           'Cambie and 16th, Vancouver, BC',
-           'Granville Island', 'Pallet Coffee Roasters, Vancouver', 'Jericho Beach, Vancouver',
-           'Point Grey Secondary, Vancouver, BC']
+errands = [
+           'Nat Bailey Stadium, Vancouver, BC', 
+           'PNE, Vancouver, BC',
+           'Science World', 
+           'Oakridge Park, Vancouver', 
+           'Granville St & W King Edward Ave, Vancouver, BC',
+           'Cambie St & W 16th Ave, Vancouver, BC',
+           'Granville Island', 
+           'Pallet Coffee Roasters, Vancouver, BC', 
+           'Jericho Beach, Vancouver, BC',
+           'Point Grey Secondary, Vancouver, BC'
+           ]
 
 # errands = ['2366 Main Mall, Vancouver, BC','Chan Centre, Vancouver, BC', 'War Memorial Gym, Vancouver, BC']
 dferrands = pd.DataFrame({'errand': errands})  # change the list into a dataframe so we can use it w osmnx
-print(dferrands)
+# print(dferrands)
 
 # slide for lambdas
 dferrands['latlong'] = dferrands.apply(lambda row: ox.geocode(row['errand']), axis=1)  # add lat/long to the df
-print(dferrands)
+# print(dferrands)
 #
-dferrands['node'] = dferrands.apply(lambda row: ox.get_nearest_node(G, row['latlong']), axis=1)  # add node ID to df
-print(dferrands)
-#
-# # create pairwise distances =============================================================
-# # I wanted to do this only with dataframes (no iteration) but it crashed if there was no path between two nodes.
-# # There may be a better way...
-#
+dferrands['node'] = dferrands.apply(lambda row: ox.nearest_nodes(G, X = row['latlong'][0], Y = row['latlong'][1]), axis=1)  # add node ID to df
+
+#print(dferrands)
+
+
+# create pairwise distances =============================================================
+# I wanted to do this only with dataframes (no iteration) but it crashed if there was no path between two nodes.
+# There may be a better way...
 # slide for table of distances
+
 dfdict = defaultdict(lambda: defaultdict())
 dfdist = defaultdict(lambda: defaultdict())
 for idx1, row1 in dferrands.iterrows():
@@ -76,7 +85,7 @@ def tourlength(tour):
 
 # slide for permutations
 tours = list(itertools.permutations(list(dferrands['node'])))  # all possible tours, including reverses
-print(tours)
+# print(tours)
 
 # classic "find min"
 besttourdist = tourlength(tours[0])
@@ -87,16 +96,18 @@ for t in tours:
         besttourdist = tourlength(t)
         besttour = t
 #
-print(besttour)
+# print(besttour)
 #
 # # best is found, now assemble the route ============================================================
 #
 # we know the order, and now we need the turn-by-turn info so it can be plotted on the map.
 bestroute = [besttour[0]]
 for index, place in enumerate(besttour):
-    bestroute += (nx.shortest_path(G, besttour[index], besttour[(index + 1) % len(besttour)], weight='length'))[1:]
+    bestroute += (nx.shortest_path(G, besttour[index], 
+                                   besttour[(index + 1) % len(besttour)], 
+                                   weight='length'))[1:]
 
-print(bestroute)
+# print(bestroute)
 #
 # # make a folium map =============================================================
 kwargs = {'color':'#AA1111','width':3}
