@@ -18,7 +18,7 @@ print(local.head())  # Note especially the column labeled geometry the value is 
 
 # show the region (project to avoid skew, but leave data in latlong for computation)
 # toshow = ox.project_gdf(local) #move the coordinates to something that looks nice
-# ox.plot_shape(toshow)
+# ax = toshow.plot(fc='gray', ec='none')
 
 # combine regions explicitly so we capture the roads that go between them.
 unified = local.unary_union.convex_hull
@@ -51,7 +51,7 @@ dferrands = pd.DataFrame({'errand': errands})  # change the list into a datafram
 dferrands['latlong'] = dferrands.apply(lambda row: ox.geocode(row['errand']), axis=1)  # add lat/long to the df
 # print(dferrands)
 #
-dferrands['node'] = dferrands.apply(lambda row: ox.nearest_nodes(G, X = row['latlong'][0], Y = row['latlong'][1]), axis=1)  # add node ID to df
+dferrands['node'] = dferrands.apply(lambda row: ox.nearest_nodes(G, X = row['latlong'][1], Y = row['latlong'][0]), axis=1)  # add node ID to df
 
 #print(dferrands)
 
@@ -111,7 +111,7 @@ for index, place in enumerate(besttour):
 #
 # # make a folium map =============================================================
 kwargs = {'color':'#AA1111','width':3}
-m = ox.plot_route_folium(G, bestroute,tiles='Stamen Watercolor', popup_attribute='name',**kwargs)
+m = ox.plot_route_folium(G, bestroute, popup_attribute='name',**kwargs)
 
 
 # function to create a marker for each errand, and add it to the map
