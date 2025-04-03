@@ -1,4 +1,3 @@
-
 import osmnx as ox
 import networkx as nx  # python's standard graph module needed by osmnx
 import folium  # needed by osmnx
@@ -6,110 +5,135 @@ import pandas as pd
 from collections import defaultdict
 import itertools
 
-# Decide with the class where you would like your tour to take place. Once decided, students working on the assembly
-# of stops will choose specific locations.
+# Choose whether to run a short or a longer list.
+# Execution time for a longer list may be significant.
+USE_SHORT_ERRAND_LIST = True
 
-# The skeleton below will require you to complete the following tasks:
-# 1. Create a graph of all the relevant streets in your project. This can be done in many different ways.
-#       See https://github.com/gboeing/osmnx-examples/blob/master/notebooks/01-overview-osmnx.ipynb
+# Should we print intermediate results and maps?
+SHOW_EXTRA_DETAIL = True
 
+# Wouldn't it be nice to have some slides to explain some elements of this code?
 
-# 2. Make a dataframe containing the names of the stops on your tour, and to it, add columns for lat/long
-#       and for nodes in the graph. All locations must be within the graph from part 1. Use openstreetmap.org
-#       to validate your choice of placename. Lat/long can be attained using osmnx function "geocode". It is
-#       up to you to figure out how to find a node in the graph, given a lat/long.
+#----------------------------------------------------------------------
+# Assemble the graph.  Same as we did in class activity 13A.
+# Get the region of interest.
+place_names = ['UBC', 'Pacific Spirit Regional Park, BC', 'Vancouver, BC']
+local = ox.geocode_to_gdf(place_names)
+print(local.head())  # Note especially the column labeled geometry the value is a Polygon which is a map region
 
-df = pd.DataFrame(columns=['Name','latlon','node'])
-List = ["parc jean Drapeau", "Parc de fontaine","McGill","UQAM"] # This list can be edited
-for place in List:
-    latlon = ox.utils.geocode(place) # return a tuple (lat,lon)
-    node = ox.get_nearest_node(G,latlon) # need G from part 1 to make the code works
-    newrow = {'Name':place, 'latlon':latlon,'node':node}
-    #newrow = {'Name':place, 'latlon':latlon}
-    df = df.append(newrow, ignore_index=True)
-print(df)
-# 3. Given a dataframe of nodes in a graph, build a 2D structure that records the shortest distance between every
-#       pair of nodes. You will use this as a lookup table for finding distances as you evaluate tours.
-# 4. Write a function that takes a list of nodes representing a tour, and a distance table (from part 3) as input,
-#       and which returns the total length of the tour. The distance should "wrap around" the end, and back to the
-#       start.
-# 5. Write a function that, given the location dataframe, makes a list of all possible tours, and from that list
-#       selects the one with least total distance. the "itertools" module has a function called "permutations"
-#       which you will certainly want to use. Use the function defined in part 4) to determine the length of a
-#       tour.
-# 6. Now that you know the best tour, you need to assemble the actual routes between the stops. The nx.shortest_path
-#       function returns a list of nodes. There are some gotchas with this task, but you'll learn a lot if you
-#       have to figure them out. :)
+# Combine regions explicitly so we capture the roads that go between them.
+unified = local.union_all().convex_hull
 
-# 7. Finally, make a folium map with the route and all the stops laid out.
+# Grab the parts of the GRAPH that fall within the region.
+G = ox.graph_from_polygon(unified, network_type='drive', truncate_by_edge=True,
+                            simplify=True)
+if SHOW_EXTRA_DETAIL:
+    print('Close map window to continue...')
+    # Show the region (project to avoid skew, but leave data in latlong for computation).
+    toshow = ox.projection.project_gdf(local)
+    #ax = toshow.plot(fc='gray', ec='none')
+    # Check to see if this is the graph we want.
+    ox.plot_graph(ox.projection.project_graph(G))
 
-
-#DOING NUMBER 3
-# a node is a coordinate location
-
-#df.loc[row_indexer,column_indexer]
-
-
-def give_me_an_array_pls(grid, df):
-    nodes = list(df.iloc[:,-1])
-    size = len(nodes)
-
-    the_array = np.zeros((size, size))
-    for i in range(size):  # row
-        for j in range(size):  # column
-             the_array[i, j] = nx.shortest_path(grid, nodes[i], nodes[j], weight='length')
-    return(the_array)
-
-
-# 1. ASSEMBLE THE GRAPH ============================================================
-city = ox.gdf_from_place('Montreal, Quebec, Canada')
-ox.save_gdf_shapefile(city)
-city = ox.project_gdf(city)
-# fig, ax = ox.plot_shape(city, figsize=(6,6))
-
-places = ['Le Plateau-Mont Royal, Montreal, Quebec, Canada',
-          'Outremont, Montreal, Quebec, Canada',
-          'Ville-Marie, Montreal, Quebec, Canada']
-G = ox.graph_from_place(places)
-G_projected = ox.project_graph(G)
-fig, ax = ox.plot_graph(G_projected, fig_height=10)
-ox.save_graph_shapefile(G, filename='false')
-
-
-# 2. assemble the list of stops =============================================================
+#----------------------------------------------------------------------
+# Assemble the errands list
 # check locations with the openstreetmaps.com website, to make sure the titles return a valid place
 
+if USE_SHORT_ERRAND_LIST:
+    errands = [ '2366 Main Mall, Vancouver, BC',
+                'Cecil Green Park House, Vancouver, BC', 
+                'War Memorial Gym, Vancouver, BC'
+                ]
+else:
+    errands = [
+                'Nat Bailey Stadium, Vancouver, BC', 
+                'PNE, Vancouver, BC',
+                'Science World', 
+                'Oakridge Park, Vancouver', 
+                'Granville St & W King Edward Ave, Vancouver, BC',
+                'Cambie St & W 16th Ave, Vancouver, BC',
+                'Granville Island', 
+                'Pallet Coffee Roasters, Vancouver, BC', 
+                'Jericho Beach, Vancouver, BC',
+                'Point Grey Secondary, Vancouver, BC'
+                ]
+
+# Change the list into a dataframe so we can use it with osmnx.
+dferrands = pd.DataFrame({'errand': errands})
+
+# slide to explain these two lambda maps.
+# Add lat/long to the df.
+dferrands['latlong'] = dferrands.apply(lambda row: ox.geocode(row['errand']), axis=1)
+
+# Find nearest node in the map to each errand site.
+dferrands['node'] = dferrands.apply(lambda row: ox.nearest_nodes(G, X = row['latlong'][1], Y = row['latlong'][0]), axis=1)  # add node ID to df
+
+if SHOW_EXTRA_DETAIL:
+    print('Errand list plus lat/long and nodes:')
+    print(dferrands)
+    print()
+
+#----------------------------------------------------------------------
+# Determine pairwise distances between errand locations.
+# I wanted to do this only with dataframes (no iteration) but it crashed if there was no path between two nodes.
+# There may be a better way...
+
+# slide for table of distances
+# TODO
+
+# Can now say something like dfdict[node1][node2] and get the shortest path from node1 to node2 dfdist gives path len
 
 
-# 3. create table of distances =============================================================
+#----------------------------------------------------------------------
+# Find the best route!
+#
+# slide to help people realize that we don't need to think about starting point yet.
+# slide to help understand the wrapping around
 
+# Function to compute tour length for a particular tour (permutation of errands).
+# TODO
 
-# 4. write a function that uses the table from part 3 to find the total length of a tour========
-def totalLength(arr, lon) -> float:
-    length = 0
-    for i in range(len(lon) - 1):
-        p1 = lon[i]
-        p2 = lon[i + 1]
-        length = length + arr[p1, p2]
-    length = length + arr[lon[0], lon[-1]]
-    return length
+# slide for permutations
+# TODO
 
-# 5. find the best tour! ===============================================================
+# Classic "find min" loop.
+# TODO
 
+if SHOW_EXTRA_DETAIL:
+    # This list will be *very* long if you have more than just a few errands.
+    print('All tours')
+    print(tours)
+    print('\nBest tour:')
+    print(besttour)
+    print()
 
+#----------------------------------------------------------------------
+# Best is found, now assemble the route.
+#
+# We know the order, but we need the turn-by-turn info so it can be plotted on the map.
+# TODO
 
-# 6. best is found, now assemble the route ============================================================
-G = nx.path_graph(10)
-tour = [1, 3, 5]
+if SHOW_EXTRA_DETAIL:
+    print('Best route:')
+    print(bestroute)
+    print()
 
-tour.append(tour[0])
-acc = []
+#----------------------------------------------------------------------
+# Create the map.
+m = ox.routing.route_to_gdf(G, bestroute).explore(color='blue', style_kwds=dict(weight=5))
 
-for index,node in enumerate(tour):
-    if index + 1 <= (len(tour) - 1):
-        acc += nx.shortest_path(G, source = node, target = tour[index+1])
-        acc.pop(-1)
-acc.append(tour[0])
-print(acc)
+# Function to create a marker for each errand, and add it to the map.
+def buildMarker(row):
+    folium.CircleMarker((row['latlong'][0], row['latlong'][1]), popup_attribute=row['errand'],
+                        color='green', radius=10, fill=True).add_to(m)
 
-# 7. make a folium map =============================================================
+# Now add markers to each errand location.
+dferrands.apply(buildMarker, axis=1)
+
+# Add a different colour marker for the start location.
+home = dferrands.iloc[0]
+folium.CircleMarker((home['latlong'][0], home['latlong'][1]), popup_attribute=home['errand'],
+                    color='blue', radius=10, fill=True, fill_opacity=1.0).add_to(m)
+
+# Save the result.
+m.save('map.html')
